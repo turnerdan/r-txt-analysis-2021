@@ -1,0 +1,70 @@
+---
+title: "part-1"
+author: "Dan Turner"
+date: "7/28/2021"
+output: html_document
+---
+
+# Part 2: Practice cleaning scraped text
+
+```{r}
+# Load packages from part 1
+library(dplyr) # modern syntax
+library(stringr) # most common string processing functions (uses stringi)
+library(tidytext) # most common text processing functions
+library(rvest)  # web scraping
+library(textdata)
+library(purrr)
+```
+
+# Challenge 1: Scrape the blog posts from the NU RCS blog
+
+Follow along with the code, and see if you can adapt it to get more data.
+
+```{r scrape wikipedia table}
+
+# What's the URL of the blog posts?
+blog_url <- "https://sites.northwestern.edu/researchcomputing/"
+
+# Extract the links from the HTML
+blog_grid <- read_html( blog_url ) %>%  # read the html
+ html_nodes( "#et_builder_outer_content > div > div > div > section > div.feature-three-col > article > a" ) %>%
+  html_attr("href")
+
+# Scrape everry blog_grid link
+map_df(blog_grid, function(i) {
+
+  cat(".") # print a period on each iteration 
+
+  pg <- read_html(sprintf(i)) # read the HTML
+
+  # BONUS CHALLENGE: Can you scrape the date as well?
+  data.frame(page_title=html_text(html_nodes(pg, ".entry-title")),
+             page_author=html_text(html_nodes(pg, "div.article-header.entry-header > p > span.entry-author.author > a")),
+             page_text=html_text(html_nodes(pg, "div.entry-content.cf")),
+             stringsAsFactors=FALSE)
+
+}) -> blog_posts
+
+
+# Check result
+blog_posts %>% sample_n(10)
+```
+
+# Challenge 2: Clean and tokenize the text field
+
+```{r}
+
+# Tokenize function
+unnest_tokens(word, [text column])
+
+```
+
+# Challenge 3: Implement an ideantical simple sentiment analysis as Part 1
+
+```{r}
+
+# Approve download of this dataset if given the option
+sentiments <- get_sentiments("afinn")
+
+```

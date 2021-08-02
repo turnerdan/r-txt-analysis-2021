@@ -1,0 +1,250 @@
+---
+title: "part-1"
+author: "Dan Turner"
+date: "7/28/2021"
+output: html_document
+---
+
+# Part 1: Cleanining, extracting, tokenization
+
+## Install packages if needed
+```{r inistallatiion, message=FALSE, warning=FALSE}
+# install.packages("stringi")
+# install.packages("stringr")
+# install.packages("gutenbergr")
+# install.packages("tidytext")
+# install.packages("rvest")
+# install.packages("topicmodels")
+# install.packages("text2vec")
+# install.packages("textdata")
+# install.packages("stm")
+# install.packages("quanteda")
+# install.packages("quanteda.textplots")
+# install.packages("quanteda.textstats")
+# install.packages("purrr")
+```
+
+## Setup R for Part 1
+
+```{r}
+# Load packages for part 1
+library(dplyr) # modern syntax
+# library(tokenizers) # consistent, convenient text tokenization
+library(gutenbergr) # easy access to gutenberg digital library
+library(stringr) # most common string processing functions (uses stringi)
+library(tidytext) # most common text processing functions
+library(rvest)  # web scraping
+library(textdata)
+
+
+# Load packages for part 3
+# library(topicmodels)  # topic modeling
+# library(quanteda) # new and powerful text analysis package for R
+# library(text2vec)  # map ngram models in vector space to train CNNs
+# library(quanteda.textstats)
+# library(quanteda.textplots)
+
+```
+
+## Basics of working with strings/text in R
+
+```{r}
+
+# Find the gutenberg_id of a book to scrape
+# Return only books where 'Doyle' is detected in the 'author' position
+gutenberg_ids <- gutenberg_works(str_detect(author, "Doyle"))
+
+# For example
+gutenberg_sherlock <- gutenberg_download(108)$text # run this and check the result
+
+# Download the raw text of your choice
+# gutenberg_text <- gutenberg_download(108)$text
+
+# A non-generalized way of doing the same thing
+# gutenberg_ids <- gutenberg_works(author == "Doyle, Arthur Conan")
+
+# Here are some ids of popular books:
+# 1342 = Pride and Prejudice by Jane Austen
+# 11 = Alice's Adventures in Wonderland by Lewis Carroll
+# 64317 = The Great Gatsby by F. Scott Fitzgerald
+
+```
+
+## Checking the source
+
+How clean is the data source? Do you consider the text before the first sentence of a book as part of the book, or do you want to restrict yourself to paragraphs of text? The first step is seeing how the data is formatted.
+
+```{r sherlock}
+
+# For The Return of Sherlock Holmes, the text begins on line 33
+head(gutenberg_download(108)$text, 40)
+
+```
+
+## Extracting the 'adventures'
+
+```{r}
+
+# Old fashioned way
+
+# The lines we want
+gutenberg_sherlock[16:28] # note leading whitespace
+
+# Import adventure list as a clean tibble
+sherlock_adventures <- gutenberg_sherlock[16:28] %>%
+  trimws() %>% # trim extra whitespace around each line 
+  str_replace_all("[\\p{P}\\p{S}&&[^-]]", "")# replace all punctuation (p) with a space (second argument) except (Subtract) hyphens
+
+
+# Compare
+gutenberg_sherlock[21] # raw
+sherlock_adventures[6] # clean
+
+
+# We could also find these using a regular expression (regex) -- more on that later
+```
+
+Next steps: Extract the text of The Adventure of the Missing Three-Quarter.
+
+```{r missing-three-quarter}
+
+# Convert the text to lowercase
+sherlock_adventures <- tolower(sherlock_adventures)
+gutenberg_sherlock <- tolower(gutenberg_sherlock)
+
+# Find the part of the file to extract (end of target title to beginning of following title)
+target_title <- sherlock_adventures[11] # The Adventure of the Missing Three-Quarter is the 11th element in the table of contents we scraped
+
+following_title <- sherlock_adventures[12] # The title of the next story will help us know where to stop
+
+# Now let's find the boundaries of the text span we want to extract
+
+# *Part 1* Get the start of the span (end of the title)
+
+# Detect the target title in the text
+hits <- str_detect(gutenberg_sherlock, target_title)
+
+# Which "hit" do we want to extract?
+gutenberg_sherlock[hits] # 2 instances, 1 in table of contents, 2 in the text
+
+# Use str_locate_all to locate every match we detected
+hits <- as.data.frame(cbind(1:length(hits),
+                               hits,
+                               str_locate_all(gutenberg_sherlock,
+                                              target_title))) 
+
+colnames(hits) <- c("line", "detected", "location")
+
+start <- hits %>% filter(detected == TRUE) %>%
+  select(line) %>% # select the line number col
+  last() %>% # to access the line numbers inside the col
+  nth(2) # second element from gutenberg_sherlock[detected]
+
+# *Part 2* Get the end of the span (following title)
+hits <- str_detect(gutenberg_sherlock, following_title)
+
+# Which "hit" do we want to extract?
+gutenberg_sherlock[hits] # 3 instances, 1 in table of contents, 2 in the text, 3 is something else
+
+# Wrap the hit and span info in a dataframe again as we locate the hits
+hits <- as.data.frame(cbind(1:length(hits),
+                               hits,
+                               str_locate_all(gutenberg_sherlock,
+                                              following_title))) 
+
+colnames(hits) <- c("line", "detected", "location")
+
+end <- hits %>% filter(detected == TRUE) %>%
+  select(line) %>% # select the line number col
+  last() %>% # to access the line numbers inside the col
+  nth(2) # second element from gutenberg_sherlock[detected]
+
+# Extraction
+sherlock_raw <- gutenberg_sherlock[start + 1 : end - 1]
+
+head(sherlock_raw) # Peek
+
+# What additional processing do you think we need?
+
+# Make a tokenized version for analysis later (as a tibble, too use tidytext)
+sherlock_tokens <- tibble(txt = sherlock_raw[3:length(sherlock_raw)]) %>% # trim title
+  unnest_tokens(word, txt) # tidytext tokenization by word (space)
+
+head(sherlock_tokens)
+
+```
+
+
+# HTML Tables: Scrape & clean a Wikipedia page table
+
+Data displayed in HTML tables can be easily converted to date frame format.
+
+```{r scrape wikipedia table}
+
+# Timeline of geopolitical changes (1900−present)
+wiki_url <- "https://en.wikipedia.org/wiki/Timeline_of_geopolitical_changes_(1900%E2%88%92present)"
+
+wiki_html <- read_html(wiki_url)
+
+# Extract the tables from the HTML and combine them as a dataframe
+wiki_tables <- wiki_html %>%  # read the html
+ html_nodes("#mw-content-text > div.mw-parser-output > table") %>%  # css selector rule
+ html_table() %>%  # convert HTML table to a df
+ bind_rows(.id = "tbl_order") # combine all the dfs, add new col
+
+# Check result
+wiki_tables %>% sample_n(10)
+
+# Simplify the dataset
+wiki_tables <- wiki_tables %>%
+  select(c("Year", "Event")) %>% # Keep only these columns
+  na.omit() # drop the leading blank row
+
+# Check result
+wiki_tables %>% sample_n(10)
+
+wiki_tokens <- wiki_tables %>%
+  group_by(Year) %>%
+  summarize(Event_By_Year = paste0(Event, collapse = ""))  %>% # one row per year
+  unnest_tokens(word, Event_By_Year) # tokenize while retaining year
+
+# Check result
+wiki_tokens %>% sample_n(10)
+```
+
+# Quick sentiment analysis
+
+```{r}
+
+# Approve download of this dataset if given the option
+sentiments <- get_sentiments("afinn")
+
+# Join the rated sentiments with the tokens and summarize by year (optional)
+wiki_sentiment <- wiki_tokens %>%
+  group_by(Year) %>%
+  inner_join(sentiments) # %>% summarise(sentiment = mean(value))
+
+sum(wiki_tokens$)
+
+```
+
+# Review
+
+We have acquired some different kinds of text from books and Wikipedia, did some data preparation, and some data extraction.
+
+# What we didn't cover on the topic of cleaning
+Regular expressions (regex) are a powerful tool for text processing.
+Stopword removal will be covered in Part 3.
+
+## Save progress
+```{r}
+
+# You'll load these files in Part 3.
+saveRDS(sherlock_raw, "part-1-sherlock-raw.rds")
+saveRDS(sherlock_tokens, "part-1-sherlock.rds")
+saveRDS(wiki_tokens, "part-1-wiki.rds")
+
+```
+
+
+

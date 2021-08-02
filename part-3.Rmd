@@ -1,0 +1,166 @@
+---
+title: "part-3"
+author: "Dan Turner"
+date: "7/28/2021"
+output: html_document
+---
+
+# Part 3: Frequency based analysis
+
+## Install packages if needed
+```{r inistallatiion, message=FALSE, warning=FALSE}
+# install.packages("stringi")
+# install.packages("stringr")
+# install.packages("gutenbergr")
+# install.packages("tidytext")
+# install.packages("rvest")
+# install.packages("topicmodels")
+# install.packages("text2vec")
+# install.packages("textdata")
+# install.packages("stm")
+# install.packages("quanteda")
+# install.packages("quanteda.textplots")
+# install.packages("quanteda.textstats")
+```
+
+## Setup R for Part 3
+
+```{r setup, message=FALSE, warning=FALSE, include=FALSE}
+# Load some packages from part 1
+library(dplyr) # modern syntax
+# library(tokenizers) # consistent, convenient text tokenization
+# library(gutenbergr) # easy access to gutenberg digital library
+library(stringr) # most common string processing functions (uses stringi)
+library(tidytext) # most common text processing functions
+# library(rvest)  # web scraping
+# library(textdata)
+
+# Load all packages for part 3
+# library(topicmodels)  # topic modeling
+library(quanteda) # new and powerful text analysis package for R
+library(text2vec)  # map ngram models in vector space to train CNNs
+library(quanteda.textstats)
+library(quanteda.textplots)
+library(stm)
+
+# Load data from part 1
+sherlock_tokenized <- readRDS("part-1-sherlock.rds")
+sherlock_raw <- readRDS("part-1-sherlock-raw.rds")
+wiki_tokenized <- readRDS("part-1-wiki.rds")
+
+```
+
+## Basics of frequency based analysis
+
+Most text analysis boils down to counting things: words, pairs of words, predetermined strings, etc. It is therefore useful to know how R does this on a basic level.
+
+For example, how many times do the words "republic" and "kingdom" appear every year in the geopolitical history timeline we scraped from Wikipedia?
+
+```{r counting_republic_kingdom}
+
+# Count "republic" and "kingdom" frequency by year
+wiki_tokenized %>%
+  group_by(Year) %>%
+  summarize(word = paste0(word, collapse = " ")) %>%
+  mutate(count_republic = str_count(word, pattern = "republic"),
+         count_kingdom = str_count(word, pattern = "kingdom")) %>%
+  select(-word)
+
+```
+
+## N-gram extraction
+
+What if we want to capture strings like 'Kingdom of X' or 'Republic of X'? We can chunk the text into *trigrams*, which means we will combine three tokens into our unit of analysis. 
+
+```{r trigrams}
+
+# Trigrams
+wiki_tri <- wiki_tokenized %>%
+  group_by(Year) %>%
+  summarize(word = paste0(word, collapse = " ")) %>%  # Flatten the strings by year
+  unnest_tokens(ngram, word, token = "ngrams", n = 3) # Tokenize while retaining year
+
+# Extract kingdom and republic names
+wiki_tri %>%
+  filter(grepl("^kingdom.of|republic.of [:alnum:]", tolower(ngram))) # more on the rule below
+
+```
+
+## Regular expressions
+grpl() is searching for Generalized Regular Expressions, and returning Logicals
+
+There are many functions that take regex arguments, and they are usually very powerful.
+
+The rule for the above cell searches for the beginning '^' of a string that has two strings, 'kingdom' and 'of'. The '.' mark means nonbreaking space, so the two strings have to appear together. The space and '[:alnum:]' capture any letters that follow the two strings and a space, usually the end of the line. The '|' symbol means 'or', so we can write rules for 'kingdom of X' and 'republic of X' at the same time.
+
+Can you see any other regular errors in the data that we could fix with regular expressions?
+
+
+# Document Term Maxtix/Feature Extraction
+
+Begins to answer the question, what does the text mean?
+
+We can address this in terms of what terms co-occur, which is the basis of topic modeling. To begin, we have to use a text processing package to create a corpus from our text. We will be using `quanteda` because it's new and powerful. It comes in at the end of the next chunk, with the `corpus()` function. 
+
+Before then, we need to talk about HOW text can map onto meaning. Not all words contribute equally to the meaning we take from text, and there's lots of other information that can get in the way, such as low-information words and punctuation.
+
+We will remove low-information words (*stop words*) and punctuation, then create a matrix that relates the words together. This is called a document feature matrix.
+
+We will also learn the differences between *types and tokens*. We will also use *stemming* to help standardize the spellings of words for easier matching.
+
+
+```{r topics}
+
+# Create a document feature matrix w/o stopwords, affixes, and punctuation
+sherlock_dfm <- tokens( sherlock_raw, remove_punct = TRUE ) %>% # tokenize a different way
+  dfm() %>%  # create the feature matrix
+  dfm_wordstem() %>% # remove affixes
+  dfm_remove(stopwords("english"))  # remove stop words
+
+# Type vs Token
+summary(sherlock_dfm)
+# Types are unique terms that we know appear, tokens are instances of types that actually appear in the text
+
+# Most frequent words
+topfeatures(sherlock_dfm)
+
+# How terms are spread across texts
+sherlock_dfm
+
+```
+
+```{r optional word cloud}
+
+# Install extra packages
+# 'wordcloud' Tested in R 4.1.0
+# install.packages("https://cran.r-project.org/src/contrib/wordcloud_2.6.tar.gz", repos=NULL, type="source")
+
+# Wordcloud
+quanteda.textplots::textplot_wordcloud(sherlock_dfm,
+                                       color = RColorBrewer::brewer.pal(8, "Set1"))
+
+```
+
+
+# Topic modeling
+
+A document feature matrix makes it easy to see how words are distributed throughout the text. 
+
+```{r}
+
+# Trim less common features
+sherlock_dfm_trim <- dfm_trim(sherlock_dfm, min_termfreq = 10)
+
+# Create a structured topic model of the trimmed version (takes a few mins)
+sherlock_stm <- stm(sherlock_dfm_trim, K = 20, verbose = FALSE)
+
+plot(sherlock_stm)
+
+```
+
+# Next steps:
+
+Vector representations of text.
+Text preparation for neural modeling.
+
+# End of Part 3

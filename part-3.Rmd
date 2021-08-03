@@ -116,7 +116,7 @@ We will also learn the differences between *types and tokens*. We will also use 
 # Create a document feature matrix w/o stopwords, affixes, and punctuation
 sherlock_dfm <- tokens( sherlock_raw, remove_punct = TRUE ) %>% # tokenize a different way
   dfm() %>%  # create the feature matrix
-  dfm_wordstem() %>% # remove affixes
+  dfm_wordstem() %>% # remove affixes (runs STEMMER over chr vectors)
   dfm_remove(stopwords("english"))  # remove stop words
 
 # Type vs Token
@@ -124,12 +124,29 @@ summary(sherlock_dfm)
 # Types are unique terms that we know appear, tokens are instances of types that actually appear in the text
 
 # Most frequent words
-topfeatures(sherlock_dfm)
+topfeatures(sherlock_dfm) # how did we get "holm"?
 
 # How terms are spread across texts
 sherlock_dfm
 
 ```
+## Handling cleaning errors
+Cleaning introduces its own problems. For example, there are 173 "instances of "holm" tokens, but why? It's because of the stemming process, which wrongly stripped the 's' from Holmes because the stemmer is trying to reverse engineer English morphology, and mistook that 's' for pluralization.
+
+
+## kwik() function
+A handy function for seeing how a certain term is used in the text, by showing the context around a match. We can use it to diagnose errors like "holm".
+
+```{r}
+
+# View KeyWords In Context using kwic() to get a sense of how a term is used
+kwic( sherlock_raw, pattern = "holm" ) # exact match (0 matches)
+
+# View KeyWords In Context using kwic() to get a sense of how a term is used
+kwic( sherlock_raw, pattern = "^holm+\\S", valuetype = "regex" ) # regex match for words that start "holm"
+
+```
+
 
 ```{r optional word cloud}
 
@@ -146,29 +163,41 @@ quanteda.textplots::textplot_wordcloud(sherlock_dfm,
 
 # Topic modeling
 
-A document feature matrix makes it easy to see how words are distributed throughout the text. 
+A document feature matrix (DFM aka document TERM matrix/DTM) makes it easy to see how words are distributed throughout the text. This type of representation of text is usually part of the preparation process for natural language modeling.
+
+We will feed the DFM into a Structured Topic Model, which will attempt to extract a predetermined number of topics. It's good to start with 3-10 topics.
 
 ```{r}
 
-# Trim less common features
-sherlock_dfm_trim <- dfm_trim(sherlock_dfm, min_termfreq = 10)
+# Recreate sherlock_dfm without stemming
+sherlock_dfm_nostem <- tokens( sherlock_raw, remove_punct = TRUE ) %>% # tokenize a different way
+  dfm() %>%  # create the feature matrix
+  #dfm_wordstem() %>% # remove affixes (runs STEMMER over chr vectors)
+  dfm_remove(stopwords("english"))  # remove stop words
+
 
 # Create a structured topic model of the trimmed version (takes a few mins)
-sherlock_stm <- stm(sherlock_dfm_trim, K = 20, verbose = FALSE)
+sherlock_stm <- dfm_trim(sherlock_dfm_nostem,  # try with sherlock_dfm too
+                         
+                         min_termfreq = 10) %>%  # trim infrequent types
+  
+  stm(K = 10, # TOPIC MODELIING (K = How many topics to extract?)
+                    verbose = FALSE)
 
 plot(sherlock_stm)
 
 ```
 
-# Document comparison
+# Ideas for next steps:
 
-A common issue is text classification, such as comparisons betweens authors or genres.
+Vector representations of text (text preparation for CNNs)
+Document comparison & classification (genre, authorship, style)
 
-TODO: Scrape 2 fiction 1 nonfiction and compare their similarities 
-
-
-# Next steps:
-
-Vector representations of text.
 
 # End of Part 3
+
+Thank you!
+
+Dan Turner [dturner@u.northwestern.edu]
+
+

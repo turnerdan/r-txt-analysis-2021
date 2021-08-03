@@ -261,7 +261,7 @@ head(sherlock_tokens)
 
 Text data varies widely in how it's structured. For example, HTML tables online are in text format, but are easily scraped into a dataframe.
 
-In the next code chunk, we scrape a wikipedia table (actually many tables) and we split it into individual words, a process called *tokenizing*. 
+In the next code chunk, we scrape a wikipedia table (actually many tables) and we split it into individual words, a process called *tokenization*. 
 
 
 ```{r scrape-wikipedia-table}
@@ -323,20 +323,22 @@ sentiment_plot # view
 
 ```
 
-# Review
+# End of Part 1
 
-We have acquired some different kinds of text from books and Wikipedia, did some data preparation (mostly cleaning), and some data extraction.
+We have acquired some different kinds of text from books and Wikipedia, cleaned them using string wrangling functions, tokenization, did some data extraction before a simple sentiment analysis.
+
+## Here's what's coming up:
+In Part 2 you'll have the option of practicing the skills I've introduced.
+In Part 3 we take the texts we processed and apply some popular text analysis methods to them.
 
 
-## Save progress
-```{r}
+## Save progress for Part 3
+```{r do not run}
 
 # You'll load these files in Part 3.
-saveRDS(sherlock_raw, "part-1-sherlock-raw.rds")
-saveRDS(sherlock_tokens, "part-1-sherlock.rds")
-saveRDS(wiki_tokens, "part-1-wiki.rds")
+# saveRDS(sherlock_raw, "part-1-sherlock-raw.rds")
+# saveRDS(sherlock_tokens, "part-1-sherlock.rds")
+# saveRDS(wiki_tokens, "part-1-wiki.rds")
 
 ```
-
-
 

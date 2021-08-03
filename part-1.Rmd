@@ -9,7 +9,6 @@ output: html_document
 
 ## Install packages if needed
 ```{r inistallatiion, message=FALSE, warning=FALSE}
-# install.packages("stringi")
 # install.packages("stringr")
 # install.packages("gutenbergr")
 # install.packages("tidytext")
@@ -22,6 +21,7 @@ output: html_document
 # install.packages("quanteda.textplots")
 # install.packages("quanteda.textstats")
 # install.packages("purrr")
+# install.packages("ggplot2")
 ```
 
 ## Setup R for Part 1
@@ -29,12 +29,12 @@ output: html_document
 ```{r}
 # Load packages for part 1
 library(dplyr) # modern syntax
-# library(tokenizers) # consistent, convenient text tokenization
 library(gutenbergr) # easy access to gutenberg digital library
 library(stringr) # most common string processing functions (uses stringi)
 library(tidytext) # most common text processing functions
 library(rvest)  # web scraping
 library(textdata)
+library(ggplot2)
 
 
 # Load packages for part 3
@@ -46,22 +46,33 @@ library(textdata)
 
 ```
 
-## Basics of working with strings/text in R
+# Wrangling strings in R
+
+We begin by downloading a book from the internet to supply some text to work with.
+
+The first few steps of a text analysis project is usually the most time consuming. Once the data are in a certain format, there are usually premade modeling solutions that you can use.
+
+The advantage of using R versus other languages is that the syntax for R is very clean and readable. This makes working with strings rather straightforward, especially using modern syntax. I'll be using tidy code, but not the brand-new R pipe (next version!).
+
+## Cleaning
+
+'Clean' is relative and you should never assume you've corrected every mistake. Text data is generally difficult to work with, and working with English brings its own issues. Any differences in syntax, spelling, affixing of words, irregular forms, geographical varieties, idiosyncratic capitalization or punctuation, etc. will be a confound for text analysis. Keep in mind that some errors are 'digital original' because of data entry and/or Optical Character Recognition mistakes.
+
+In the next code chunk, we fetch a digital book to see how clean or dirty it is.
+
 
 ```{r}
 
 # Find the gutenberg_id of a book to scrape
-# Return only books where 'Doyle' is detected in the 'author' position
-gutenberg_ids <- gutenberg_works(str_detect(author, "Doyle"))
 
-# For example
+# Return only books where 'Doyle' is detected in the 'author' position
+gutenberg_ids <- gutenberg_works(str_detect(author, "Doyle")) # read about str_detect() below
+
+# Run this
 gutenberg_sherlock <- gutenberg_download(108)$text # run this and check the result
 
 # Download the raw text of your choice
-# gutenberg_text <- gutenberg_download(108)$text
-
-# A non-generalized way of doing the same thing
-# gutenberg_ids <- gutenberg_works(author == "Doyle, Arthur Conan")
+gutenberg_text <- gutenberg_download(1)$text
 
 # Here are some ids of popular books:
 # 1342 = Pride and Prejudice by Jane Austen
@@ -70,9 +81,16 @@ gutenberg_sherlock <- gutenberg_download(108)$text # run this and check the resu
 
 ```
 
+## stringr package
+str_detect() is a stringr function that returns a logical TRUE if a pattern is detected in a string passed to it. Here, the string is the 'author' field in the object returned by gutenberg_works(), and the pattern is "Doyle". We could make a much better rule by writing a regular expression here instead, but we'll get to that!
+
+You should know that the `stringr` package is a collection of very common text wrangling functions. It's built on a more powerful package, `stringi`, which has five times more functionality, but it's more difficult to use. If you ever need a very specific function and `stringr` is not working, check `stringi`.
+
 ## Checking the source
 
-How clean is the data source? Do you consider the text before the first sentence of a book as part of the book, or do you want to restrict yourself to paragraphs of text? The first step is seeing how the data is formatted.
+How clean is the data source? Do you consider the text before the first sentence of a book as part of the book, or do you want to restrict yourself to paragraphs of text?
+
+The first step is seeing how the data is formatted, and measuring that against your goals. How much work does it need?
 
 ```{r sherlock}
 
@@ -81,30 +99,94 @@ head(gutenberg_download(108)$text, 40)
 
 ```
 
-## Extracting the 'adventures'
+## Scraping the Table of Contents
 
-```{r}
+I like that the Table of Contents for this book is a list of adventures (recall how indexing works in R--this would be represented as [16:28]).
 
-# Old fashioned way
+Let's scrape this list from the book's text, then extract our story of choice.
 
-# The lines we want
-gutenberg_sherlock[16:28] # note leading whitespace
+```{r scrape ToC}
 
-# Import adventure list as a clean tibble
-sherlock_adventures <- gutenberg_sherlock[16:28] %>%
+# Import ToC as a cleani tibble
+sherlock_adventures <- gutenberg_sherlock[16:28] %>% # range of lines that's the ToC
   trimws() %>% # trim extra whitespace around each line 
-  str_replace_all("[\\p{P}\\p{S}&&[^-]]", "")# replace all punctuation (p) with a space (second argument) except (Subtract) hyphens
-
+  str_replace_all("[\\p{P}\\p{S}&&[^-]]", "")# replace all punctuation (p) with a space (second argument) except (Subtract) initial hyphens using a Regular Expression -- see more below
 
 # Compare
 gutenberg_sherlock[21] # raw
 sherlock_adventures[6] # clean
 
-
 # We could also find these using a regular expression (regex) -- more on that later
 ```
+## Regular expressions (REGEX)
 
-Next steps: Extract the text of The Adventure of the Missing Three-Quarter.
+Regex is a syntax for writing generalized patterns, usually among character vectors like text and numbers. If you want to identify, count, extract, or parse anything using pattern recognition, it's the typical starting place.
+
+You will see many examples of it in this walkthrough, because it's one of the basic tools of text wrangling in R. I think it's difficult to read, but there's no alternative.
+
+```{r regex-phone-num}
+
+phones = "If you want to call the White House use 202-456-1111. But if you want to call Congress, use (202)224-3121."
+
+# Example from https://cran.r-project.org/web/packages/stringr/vignettes/regular-expressions.html because it taught me how to comment within regex rules:
+extract_phones <- regex("
+  \\(?     # optional opening parens
+  (\\d{3}) # area code
+  [)- ]?   # optional closing parens, dash, or space
+  (\\d{3}) # another three numbers
+  [ -]?    # optional space or dash
+  (\\d{3}) # three more numbers
+  ", comments = TRUE)
+
+str_match(phones, extract_phones)  # retreive the first match
+
+# How do you get them all? See next code chunk.
+
+```
+## Regex examples
+
+Because this is the trickiest part of working with text, let's look at some more handy functions for string wrangling.
+
+```{r regex-2}
+
+# Common stringr functions
+
+str_match_all(phones, extract_phones)  # retrieve all matches; str_match() returns first match only
+
+# str_detect(string, pattern) returns TRUE if the pattern is detected in the string
+guides <- gutenberg_works(str_detect(title, "^Guide")) # if it's TRUE, it gets returned
+
+str_count(guides, "Yosemite") # works like str_detect() but counts the TRUEs
+
+str_match_all(guides, "Yosemite") # see the matches
+
+str_replace_all(phones, "202", "313") # substitute x for y
+
+str_split(guides$title, "[[:punct:]]|[[:digit:]]") # split string where rule detected
+
+str_split_fixed(guides$title[1], " ", n = 6) # will let you apply the split on every nth detection/location
+
+str_locate(phones, "White House") # what are the indexes?
+
+# That means we can find the boundaries of matches like this:
+str_locate(phones, "White House")[1] # W
+str_locate(phones, "White House")[2] # e
+
+```
+
+## More regex tips
+Note the useful [[:punct:]] and [[:digit:]] list codes. You can find more of them here: https://www.petefreitag.com/cheatsheets/regex/character-classes/
+
+There are numerous regex 'generators' online, but I have only had mixed success with using these in real contexts. Usually it takes experimentation to get the correct result.
+
+
+# String extraction
+
+Often it is useful to split a text into smaller pieces. Either because that reflects its original state, or because it facilitates analysis. If you can't use str_split() functions to separate the parts, you will likely have to search for a more complex pattern. 
+
+Extracting substrings is a matter of locating the boundaries. Let's find the beginning and end of one of the Sherlock stories, The Adventure of the Missing Three-Quarter.
+
+For its beginning, we will take the end of the chapter title (as it appeared on paper) and extract everything up to the beginning of the following chapter's title.
 
 ```{r missing-three-quarter}
 
@@ -119,7 +201,7 @@ following_title <- sherlock_adventures[12] # The title of the next story will he
 
 # Now let's find the boundaries of the text span we want to extract
 
-# *Part 1* Get the start of the span (end of the title)
+# *Step 1* Get the start of the span (end of the title)
 
 # Detect the target title in the text
 hits <- str_detect(gutenberg_sherlock, target_title)
@@ -140,7 +222,7 @@ start <- hits %>% filter(detected == TRUE) %>%
   last() %>% # to access the line numbers inside the col
   nth(2) # second element from gutenberg_sherlock[detected]
 
-# *Part 2* Get the end of the span (following title)
+# *Step 2* Get the end of the span (following title)
 hits <- str_detect(gutenberg_sherlock, following_title)
 
 # Which "hit" do we want to extract?
@@ -177,9 +259,12 @@ head(sherlock_tokens)
 
 # HTML Tables: Scrape & clean a Wikipedia page table
 
-Data displayed in HTML tables can be easily converted to date frame format.
+Text data varies widely in how it's structured. For example, HTML tables online are in text format, but are easily scraped into a dataframe.
 
-```{r scrape wikipedia table}
+In the next code chunk, we scrape a wikipedia table (actually many tables) and we split it into individual words, a process called *tokenizing*. 
+
+
+```{r scrape-wikipedia-table}
 
 # Timeline of geopolitical changes (1900−present)
 wiki_url <- "https://en.wikipedia.org/wiki/Timeline_of_geopolitical_changes_(1900%E2%88%92present)"
@@ -209,32 +294,39 @@ wiki_tokens <- wiki_tables %>%
   unnest_tokens(word, Event_By_Year) # tokenize while retaining year
 
 # Check result
-wiki_tokens %>% sample_n(10)
+wiki_tokens %>% head(10)
 ```
+## Are we done?
+A quick inspection will show that this data has some errors in it. Are they the kind of error that can change our analysis? In this case no, but it's typical to go through many cleaning steps.
 
 # Quick sentiment analysis
 
-```{r}
+A sentiment analysis will tell us about the meaning of the text, in terms of its emotional content. It can answer whether Tweets are trending optimistic or negative, or what internet commentators think about a certain product. We will analyze the timeline from Wikipedia as an example.
+
+```{r sentiment, message=TRUE, warning=FALSE}
 
 # Approve download of this dataset if given the option
 sentiments <- get_sentiments("afinn")
 
-# Join the rated sentiments with the tokens and summarize by year (optional)
+# Join the rated sentiments with the tokens and summarize by year
 wiki_sentiment <- wiki_tokens %>%
-  group_by(Year) %>%
-  inner_join(sentiments) # %>% summarise(sentiment = mean(value))
+  group_by(Year) %>%  # we want one row per year
+  inner_join(sentiments) %>%  # keeps only tokens from wiki that have sentiment values
+  summarise(avg_sentiment = mean(value)) # new column with mean of 'value' column
 
-sum(wiki_tokens$)
+# Quick plot of our results
+sentiment_plot <- ggplot(wiki_sentiment, aes(Year, avg_sentiment)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+sentiment_plot # view
 
 ```
 
 # Review
 
-We have acquired some different kinds of text from books and Wikipedia, did some data preparation, and some data extraction.
+We have acquired some different kinds of text from books and Wikipedia, did some data preparation (mostly cleaning), and some data extraction.
 
-# What we didn't cover on the topic of cleaning
-Regular expressions (regex) are a powerful tool for text processing.
-Stopword removal will be covered in Part 3.
 
 ## Save progress
 ```{r}

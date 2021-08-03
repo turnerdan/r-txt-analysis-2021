@@ -25,6 +25,8 @@ output: html_document
 
 ## Setup R for Part 3
 
+Run this chunk to load the correct packages and datasets.
+
 ```{r setup, message=FALSE, warning=FALSE, include=FALSE}
 # Load some packages from part 1
 library(dplyr) # modern syntax
@@ -158,9 +160,15 @@ plot(sherlock_stm)
 
 ```
 
+# Document comparison
+
+A common issue is text classification, such as comparisons betweens authors or genres.
+
+TODO: Scrape 2 fiction 1 nonfiction and compare their similarities 
+
+
 # Next steps:
 
 Vector representations of text.
-Text preparation for neural modeling.
 
 # End of Part 3
